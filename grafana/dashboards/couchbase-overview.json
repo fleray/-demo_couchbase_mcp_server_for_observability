@@ -1,0 +1,90 @@
+{
+  "id": null,
+  "uid": "couchbase-overview",
+  "title": "Couchbase Cluster Overview",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-15m", "to": "now" },
+  "tags": ["couchbase", "demo"],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Cluster Up",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "up{job=\"couchbase\"}", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": 0 }, { "color": "green", "value": 1 }] }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "KV Item Count (demo bucket)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "kv_curr_items{bucket=\"demo\"}", "refId": "A" }]
+    },
+    {
+      "id": 3,
+      "title": "Active KV Connections",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "kv_curr_connections", "refId": "A" }]
+    },
+    {
+      "id": 4,
+      "title": "CPU Utilization (%)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "sys_cpu_utilization_rate", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "percent" } }
+    },
+    {
+      "id": 5,
+      "title": "KV Ops / sec",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "sum(rate(kv_ops[1m]))", "legendFormat": "kv ops/s", "refId": "A" }]
+    },
+    {
+      "id": 6,
+      "title": "N1QL Requests / sec",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "sum(rate(n1ql_requests[1m]))", "legendFormat": "n1ql requests/s", "refId": "A" }]
+    },
+    {
+      "id": 7,
+      "title": "Memory: Used vs Free (system)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "targets": [
+        { "expr": "sys_mem_actual_used", "legendFormat": "used", "refId": "A" },
+        { "expr": "sys_mem_actual_free", "legendFormat": "free", "refId": "B" }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Management REST Requests / sec",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "sum(rate(cm_http_requests_total[1m]))", "legendFormat": "req/s", "refId": "A" }]
+    }
+  ]
+}

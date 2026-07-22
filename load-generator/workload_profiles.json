@@ -1,0 +1,100 @@
+{
+  "profiles": [
+    {
+      "id": "light-demo",
+      "name": "Light Demo Load",
+      "description": "Minimal load for demonstration purposes",
+      "kv_get_percentage": 30,
+      "kv_set_percentage": 20,
+      "kv_upsert_percentage": 10,
+      "n1ql_select_percentage": 20,
+      "n1ql_upsert_percentage": 15,
+      "n1ql_join_percentage": 5,
+      "operations_per_second": 10
+    },
+    {
+      "id": "balanced",
+      "name": "Balanced Workload",
+      "description": "Equal mix of KV and N1QL operations",
+      "kv_get_percentage": 30,
+      "kv_set_percentage": 20,
+      "kv_upsert_percentage": 10,
+      "n1ql_select_percentage": 20,
+      "n1ql_upsert_percentage": 15,
+      "n1ql_join_percentage": 5,
+      "operations_per_second": 50
+    },
+    {
+      "id": "kv-heavy",
+      "name": "KV Heavy Workload",
+      "description": "Focus on key-value operations",
+      "kv_get_percentage": 60,
+      "kv_set_percentage": 25,
+      "kv_upsert_percentage": 15,
+      "n1ql_select_percentage": 0,
+      "n1ql_upsert_percentage": 0,
+      "n1ql_join_percentage": 0,
+      "operations_per_second": 500
+    },
+    {
+      "id": "query-heavy",
+      "name": "Query Heavy Workload",
+      "description": "Focus on N1QL queries",
+      "kv_get_percentage": 10,
+      "kv_set_percentage": 10,
+      "kv_upsert_percentage": 10,
+      "n1ql_select_percentage": 40,
+      "n1ql_upsert_percentage": 20,
+      "n1ql_join_percentage": 10,
+      "operations_per_second": 100
+    },
+    {
+      "id": "select-only",
+      "name": "Read-Only Workload",
+      "description": "Only SELECT and GET operations",
+      "kv_get_percentage": 50,
+      "kv_set_percentage": 0,
+      "kv_upsert_percentage": 0,
+      "n1ql_select_percentage": 50,
+      "n1ql_upsert_percentage": 0,
+      "n1ql_join_percentage": 0,
+      "operations_per_second": 200
+    },
+    {
+      "id": "write-heavy",
+      "name": "Write Heavy Workload",
+      "description": "Focus on write operations",
+      "kv_get_percentage": 20,
+      "kv_set_percentage": 30,
+      "kv_upsert_percentage": 20,
+      "n1ql_select_percentage": 10,
+      "n1ql_upsert_percentage": 15,
+      "n1ql_join_percentage": 5,
+      "operations_per_second": 100
+    },
+    {
+      "id": "stress-test",
+      "name": "Stress Test High Load",
+      "description": "High throughput stress test",
+      "kv_get_percentage": 40,
+      "kv_set_percentage": 30,
+      "kv_upsert_percentage": 10,
+      "n1ql_select_percentage": 10,
+      "n1ql_upsert_percentage": 5,
+      "n1ql_join_percentage": 5,
+      "operations_per_second": 1000
+    },
+    {
+      "id": "analytics",
+      "name": "Analytics Workload",
+      "description": "Complex queries with JOINs",
+      "kv_get_percentage": 5,
+      "kv_set_percentage": 5,
+      "kv_upsert_percentage": 5,
+      "n1ql_select_percentage": 40,
+      "n1ql_upsert_percentage": 10,
+      "n1ql_join_percentage": 35,
+      "operations_per_second": 50
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+# Non-secret settings. Override any of these from the sidebar at runtime too.
+# The OpenAI API key itself goes in .env, NOT here — never commit secrets
+# to a YAML file that might end up in git.
+
+mcp_server_url: "http://localhost:8000/mcp"
+
+# One of: gpt-4o, gpt-4-turbo, gpt-4, gpt-3.5-turbo
+model: "gpt-4o"
+
+max_tokens: 1536
+
+# Safety cap on the agentic tool-calling loop per user turn, in case the
+# model gets stuck calling tools back-to-back.
+max_tool_iterations: 6
+
+system_prompt: >
+  You are an SRE observability assistant for a Couchbase cluster. You have
+  read-only tools (via MCP) to check cluster health, inspect buckets and
+  schemas, and analyze query performance. Use the tools to ground every
+  factual claim in real data from the cluster — never guess at numbers.
+  When you report a problem, name the specific metric or query involved.
+  Be concise. If nothing looks unhealthy, say so plainly.

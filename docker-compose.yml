@@ -1,0 +1,149 @@
+services:
+
+  # ---------------------------------------------------------------------
+  # 1) Couchbase Server 8.0.2 — single node, Community Edition
+  #    (swap the image tag for couchbase/server:8.0.2 to use Enterprise)
+  # ---------------------------------------------------------------------
+  couchbase:
+    image: couchbase/server:8.0.2
+    container_name: couchbase
+    hostname: couchbase
+    ports:
+      - "8091-8096:8091-8096"   # Admin UI / REST, views, query, search, eventing
+      - "11210:11210"           # KV / memcached binary protocol (used by MCP server SDK)
+    volumes:
+      - couchbase_data:/opt/couchbase/var
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8091/pools"]
+      interval: 5s
+      timeout: 10s
+      retries: 60
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------
+  # 2) One-shot init job: creates the cluster, installs Couchbase's native
+  #    travel-sample bucket, and creates a primary index on it.
+  #    Runs once then exits — docker compose reports it as "exited (0)"
+  # ---------------------------------------------------------------------
+  couchbase-init:
+    image: couchbase/server:8.0.2
+    container_name: couchbase-init
+    depends_on:
+      couchbase:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "/init/init-cluster.sh"]
+    volumes:
+      - ./init:/init
+    environment:
+      CB_HOST: couchbase
+      CB_USERNAME: Administrator
+      CB_PASSWORD: password123
+      CB_BUCKET: travel-sample
+
+  # ---------------------------------------------------------------------
+  # 3) Official Couchbase MCP server — read-only, Streamable HTTP transport
+  # ---------------------------------------------------------------------
+  mcp-server:
+    image: couchbaseecosystem/mcp-server-couchbase:latest
+    container_name: mcp-server
+    depends_on:
+      couchbase-init:
+        condition: service_completed_successfully
+    environment:
+      CB_CONNECTION_STRING: couchbase://couchbase
+      CB_USERNAME: Administrator
+      CB_PASSWORD: password123
+      CB_MCP_READ_ONLY_MODE: "true"     # observability agent: no writes
+      CB_MCP_TRANSPORT: http
+      CB_MCP_HOST: 0.0.0.0
+      CB_MCP_PORT: "8000"
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------
+  # 4) Prometheus — scrapes Couchbase's built-in /metrics endpoint (native
+  #    since Couchbase Server 7.0+, no separate exporter needed)
+  # ---------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    depends_on:
+      couchbase-init:
+        condition: service_completed_successfully
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------
+  # 5) Grafana — pre-provisioned Prometheus datasource + dashboard
+  # ---------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------
+  # 6) Load Generator Web App — RESTful control panel for workload management
+  #    Supports KV operations, N1QL queries, and dynamic configuration
+  # ---------------------------------------------------------------------
+  load-generator:
+    build:
+      context: ./load-generator
+      dockerfile: Dockerfile
+    container_name: load-generator
+    depends_on:
+      couchbase-init:
+        condition: service_completed_successfully
+    environment:
+      CB_HOST: couchbase
+      CB_USERNAME: Administrator
+      CB_PASSWORD: password123
+      CB_BUCKET: travel-sample
+    ports:
+      - "5000:5000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------
+  # 7) Streamlit Observability Agent — chat UI backed by the MCP server
+  #    LLM credential (OPENAI_API_KEY) comes from streamlit-agent/.env,
+  #    never from this file — see streamlit-agent/SETUP.md
+  # ---------------------------------------------------------------------
+  streamlit-agent:
+    build:
+      context: ./streamlit-agent
+      dockerfile: Dockerfile
+    container_name: streamlit-agent
+    depends_on:
+      mcp-server:
+        condition: service_started
+    env_file:
+      - ./streamlit-agent/.env
+    environment:
+      MCP_SERVER_URL: http://mcp-server:8000/mcp
+    ports:
+      - "8501:8501"
+    restart: unless-stopped
+
+volumes:
+  couchbase_data:
+  prometheus_data:
+  grafana_data:

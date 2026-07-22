@@ -1,0 +1,13 @@
+streamlit-agent/.env
+streamlit-agent/venv/
+streamlit-agent/__pycache__/
+
+load-generator/couchbase_lib/
+load-generator/cbc-pillowfight
+load-generator/libcouchbase.so*
+load-generator/load-generator
+
+# general patterns
+__pycache__/
+*.pyc
+*.so
