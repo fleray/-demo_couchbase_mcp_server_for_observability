@@ -13,3 +13,9 @@ scrape_configs:
       - targets: ["couchbase:8091"]
         labels:
           cluster: "demo-cluster"
+
+  - job_name: "load-generator"
+    scheme: http
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["load-generator:5000"]

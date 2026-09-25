@@ -1,6 +1,6 @@
 streamlit>=1.38
 openai>=1.0
-mcp>=1.10
+mcp>=1.10,<2.0
 python-dotenv>=1.0
 PyYAML>=6.0
 nest_asyncio>=1.5

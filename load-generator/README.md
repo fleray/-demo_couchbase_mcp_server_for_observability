@@ -1,263 +1,104 @@
 # Couchbase Load Generator
 
-A Go-based load generator for Couchbase with a live web control panel:
-per-operation-type throughput sliders, real-time metrics, and a searchable
-operation log — backed directly by the native Couchbase Go SDK (`gocb/v2`)
-for high throughput.
+Drives continuous SQL++ traffic against the `travel-sample` bucket using
+Couchbase's own `cbc-n1qlback` CLI tool (from `libcouchbase`), and exposes a
+live 3-pane web view plus Prometheus metrics.
 
-> This started as a Python/Flask prototype (`app.py`) but was rewritten in Go
-> because the Python SDK could not sustain the target throughput — client-side
-> overhead capped it around 5K ops/sec regardless of threading. The files in
-> this directory from that era (`app.py`, `requirements.txt`, `cbc-pillowfight`,
-> `libcouchbase.so*`, `workload.c`, `templates/`, `static/`, `couchbase_lib/`)
-> are no longer used; `main.go` is the current implementation.
-
-## Features
-
-- **Web control panel** (served by the Go binary itself, no separate frontend
-  build): one slider per operation type, each showing its live cumulative
-  count and current ops/sec rate inline.
-- **Six operation types**, each independently configurable from 0-5,000
-  ops/sec:
-  - KV: GET, SET, UPSERT
-  - N1QL (SQL++): SELECT, UPSERT, JOIN
-- **Per-type dedicated worker pools** — each operation type gets its own
-  independently rate-limited pool of workers, so one type's throughput can
-  never throttle another's (see [Recent Improvements](#recent-improvements)).
-- **Operation log** with colored badges per operation type, the actual doc
-  ID (KV) or full SQL++ statement (N1QL) executed, a text filter, a
-  pause/resume toggle, and a clear button.
-- **Travel-sample dataset**: all queries run against Couchbase's `travel-sample`
-  sample bucket.
-- **REST API** for programmatic control (see below).
-
-## Quick Start
-
-```bash
-docker-compose up -d
-```
-
-Then open **http://localhost:5000**.
-
-To rebuild after editing `main.go`:
-
-```bash
-docker-compose build load-generator
-docker-compose up -d --no-deps --force-recreate load-generator
-```
-
-`--force-recreate` matters here: `docker-compose restart` reuses whatever
-image the container was already created from and will **not** pick up a
-freshly built image.
-
-## Web Control Panel
-
-- **Status bar**: shows Running/Stopped, with Start/Stop buttons that
-  disable themselves appropriately (Start is disabled while running, Stop
-  is disabled while stopped).
-- **Operation Load sliders**: one per operation type, 0-5,000 ops/sec, with
-  tick marks and labels every 500 units and a live value bubble while
-  dragging. To the right of each slider: the cumulative op count and the
-  current ops/sec rate for that type.
-- **Operation Log**: live-updating list of executed operations. Each entry
-  shows a colored badge (KV GET blue, KV SET green, KV UPSERT teal, N1QL
-  SELECT orange, N1QL UPSERT pink, N1QL JOIN purple), a timestamp, and the
-  actual doc ID or SQL++ statement that ran. Filter box searches both the
-  operation label and its detail text; Pause freezes the view without
-  stopping the workload; Clear wipes the log.
-
-## API Endpoints
-
-### Get current status (cumulative counts + current rate)
-
-```bash
-GET /api/status
-```
-
-```json
-{
-  "kv_get": 12034,
-  "kv_set": 8021,
-  "kv_upsert": 15872,
-  "n1ql_select": 3021,
-  "n1ql_upsert": 1204,
-  "n1ql_join": 512,
-  "total": 40664,
-  "current_rate": 987,
-  "is_running": true
-}
-```
-
-### Get / update configuration (absolute ops/sec per type, not percentages)
-
-```bash
-GET /api/config
-POST /api/config
-Content-Type: application/json
-
-{
-  "kv_get_ops": 1000,
-  "kv_set_ops": 500,
-  "kv_upsert_ops": 500,
-  "n1ql_select_ops": 200,
-  "n1ql_upsert_ops": 100,
-  "n1ql_join_ops": 50
-}
-```
-
-Sliders can be changed at any time, including while the workload is running
-— each operation type's dedicated worker pool picks up the new target
-immediately without needing a restart.
-
-### Workload control
-
-```bash
-POST /api/control/start
-POST /api/control/stop
-```
-
-### Operation log
-
-```bash
-GET  /api/logs        # {"logs": [{"time": "...", "op": "kv_upsert", "detail": "key-..."}]}
-POST /api/logs/clear
-```
-
-### Health check
-
-```bash
-GET /api/health
-```
-
-## Environment Variables
-
-- `CB_HOST`: Couchbase hostname (default: `couchbase`)
-- `CB_USERNAME`: Username (default: `Administrator`)
-- `CB_PASSWORD`: Password (default: `password123`)
-- `CB_BUCKET`: Bucket name (default: `travel-sample`)
-
-## N1QL Statements Used
-
-```sql
--- n1ql_select
-SELECT * FROM `travel-sample` LIMIT 5
-
--- n1ql_upsert
-UPSERT INTO `travel-sample` (KEY, VALUE) VALUES ("<generated-key>", {"type":"load-gen"})
-
--- n1ql_join
-SELECT h.name, r.sourceairport
-FROM `travel-sample` r
-JOIN `travel-sample` h ON r.airlineid = META(h).id
-WHERE r.type = 'route'
-LIMIT 5
-```
-
-All identifiers containing a hyphen (`travel-sample`) must be backtick-quoted
-in N1QL — an earlier version of the UPSERT statement omitted this and failed.
+> Earlier iterations of this directory (a Python/Flask app driving
+> `cbc-pillowfight`, and later a Go binary with its own control-panel UI) are
+> archived in [`OLD/`](OLD/) for reference and are not used by the current
+> `Dockerfile`.
 
 ## Architecture
 
-- **`main.go`**: single Go binary, no external dependencies at runtime.
-  - Serves the control panel UI and REST API over `net/http`.
-  - Connects to Couchbase via `gocb/v2`, using a tuned connection string
-    (`max_idle_http_connections=200&max_perhost_idle_http_connections=200`)
-    to give the SDK's HTTP transport enough headroom for concurrent N1QL
-    workers (see below).
-  - One dedicated goroutine pool (128 workers) per operation type, each
-    independently rate-limited to that type's own configured ops/sec.
-  - In-memory rolling operation log (last 100 entries) guarded by its own
-    mutex, separate from the config/metrics mutex.
+- **`run-new.sh`** — entrypoint, prints config, execs `app-new.py`.
+- **`queries.json`** — the list of queries to run, loaded at startup (fails
+  fast with a clear error if it's missing a `key`/`statement`, or has a
+  duplicate/reserved key). Edit it to change what runs — no code change
+  needed. It's bind-mounted into the container read-only
+  (`docker-compose.yml`), so editing it on the host and restarting the
+  container (`docker compose restart load-generator`, no rebuild required)
+  is enough to pick up the change.
+- **`app-new.py`** — for each query in `queries.json`, runs a long-lived
+  `cbc-n1qlback -T ...` process (`-T`/`--timings` enables its live per-second
+  latency histogram, printed right alongside `QUERIES/SEC`). Every line of
+  its output is parsed:
+  - `QUERIES/SEC` / `ROWS/SEC` / `ERRORS` / `+Ns` rows update that query's
+    live stats readout.
+  - histogram bucket rows (e.g. `[360 - 369]us |# - 1`) update that query's
+    latest bucket-count snapshot (their counts are cumulative per process,
+    so the latest value per bucket is always current) and feed the
+    newly-observed delta into a Prometheus histogram — every individual
+    latency sample `cbc-n1qlback` itself recorded, not a separate
+    approximation.
+- **Web view** (`http://localhost:5000`) — page split into 3 horizontal
+  panels, one per query: the full statement as a header, a one-line live
+  stats readout, then two Chart.js charts side by side (left/right halves):
+  - **left** — a live-updating horizontal bar chart of the latency
+    histogram.
+  - **right** — a live-updating line chart of that query's queries/sec over
+    time (category x-axis: one tick per collected sample, in arrival
+    order), with a time-range dropdown (5m/15m/30m/1h/2h) and the
+    Stop/Start toggle button both sitting at its top-right. That history
+    lives only in the browser tab's memory (capped at 2h of 1-per-second
+    samples, reading 0 for any stopped period) — nothing is persisted
+    server-side; switching the dropdown just re-slices what's already in
+    memory, no refetch.
 
-## Recent Improvements
+  `static/chart.umd.min.js` is vendored locally so the demo doesn't depend
+  on a CDN at runtime. The Stop/Start button controls both of that query's
+  charts together: stopping kills its `cbc-n1qlback` process and freezes
+  the histogram at its last frame (the QPS line drops to 0); starting again
+  wipes that query's histogram/stats and launches a fresh process. A
+  "Stop All" / "Start All" button in the top bar controls all 3 queries at
+  once.
+- **`/metrics`** (`http://localhost:5000/metrics`) — Prometheus exposition
+  of `loadgen_query_duration_seconds` (a `Histogram`, labeled by `query`),
+  scraped by the `load-generator` job in `prometheus/prometheus.yml` and
+  charted in Grafana's **Load Generator - Query Duration** dashboard.
 
-- **Migrated Python/Flask + Python SDK → Go + native Couchbase Go SDK.**
-  The Python implementation plateaued around 5K ops/sec purely from
-  client-side overhead (confirmed by testing `cbc-pillowfight`, the
-  Couchbase C SDK benchmark tool, which reached 95K+ ops/sec on the same
-  cluster). Go removes that ceiling.
+Note: `cbc-n1qlback -T` also supports a single `Mean = ..., StdDeviation = ...`
+summary line in some libcouchbase builds, but the version pinned in Debian
+12's apt repo (3.3.19) never printed one in testing (checked exhaustively,
+including under SIGINT) — only the per-second bucket histogram. Parsing that
+histogram directly, as above, sidesteps the difference entirely.
 
-- **Per-operation-type worker pools**, replacing a single shared pool of
-  workers that randomly picked which operation type to run each iteration.
-  Under that design, a slower operation type (N1QL, with real network +
-  query-engine latency) occupied worker "slots" longer, which silently
-  throttled whatever fast KV operations happened to share that pool — so
-  turning up an N1QL slider would drag down KV throughput even though the
-  KV targets hadn't changed. Each type now has its own pool, fully isolated
-  from every other type's rate and latency.
+## The queries
 
-- **Fixed a rate-limiter bug** where integer-division flooring in the
-  per-worker delay calculation pinned throughput at exactly the worker
-  count (128 ops/sec) for any target below that, regardless of the
-  configured slider value. Replaced with floating-point pacing.
+Defined in [`queries.json`](queries.json), currently:
 
-- **Fixed a goroutine leak across Start/Stop cycles.** The stop signal was
-  read from a mutable global variable; if a worker was mid-sleep when
-  Start was clicked again before it noticed Stop, it would silently start
-  reading the *new* run's channel and never terminate. Repeated start/stop
-  cycles leaked goroutines and Couchbase connections without bound,
-  eventually crashing the process — Docker's restart policy would then
-  bring it back up with everything reset to zero, which looked like "it
-  just stopped" from the UI. Each run now gets its own stop channel passed
-  explicitly instead of read from a shared global.
+```sql
+-- count_all
+SELECT COUNT(*) FROM `travel-sample`
 
-- **Fixed a critical N1QL connection leak.** `cluster.Query()`'s returned
-  `*QueryResult` was never drained or closed, so gocb could never return
-  its underlying HTTP connection to the pool. Under sustained load this
-  leaked one connection (and its two background goroutines) per query —
-  tens of thousands of goroutines within minutes, driving client CPU past
-  1000% and causing measured throughput to silently decay over time with
-  no logged errors. Every query path now fully drains (`result.Next()`)
-  and closes (`result.Close()`) its result.
+-- select_5000
+SELECT * FROM `travel-sample` LIMIT 5000
 
-- **Added panic recovery per worker iteration** so a single failing
-  operation can no longer crash the entire process (previously, panics in
-  background worker goroutines weren't covered by `net/http`'s per-request
-  recovery).
+-- route_airline_join
+SELECT h.name, r.sourceairport FROM `travel-sample` r
+JOIN `travel-sample` h ON r.airlineid = META(h).id
+WHERE r.type = 'route' LIMIT 5
+```
 
-- **Fixed the N1QL JOIN statement**, which used an invalid `ON KEYS
-  r.airlineid` clause (type mismatch — `airlineid` is numeric, not a
-  document key) and errored in the Query Workbench. Replaced with
-  `ON r.airlineid = META(h).id`.
+`key` becomes that query's URL-safe identifier (used in `/api/control/<key>/...`
+and as its Prometheus `query` label) and its panel title in the web view is
+just its `statement` — so keep `key` short and stable, and free to add,
+remove, or reorder entries (the web view and `/metrics` labels follow
+whatever's in the file; `key` must be unique and can't be `all`, which is
+reserved for the "control every query" endpoints).
 
-- **Fixed the N1QL UPSERT statement**, which referenced `travel-sample`
-  unquoted; bucket names containing a hyphen must be backtick-quoted in
-  N1QL.
+## Platform note
 
-- **UI redesign**: switched from percentage-based sliders (which had to sum
-  to 100%) to independent absolute ops/sec sliders (0-5,000) per operation
-  type, each with tick marks, a live value bubble, and inline
-  cumulative-count/rate display. Added the operation log panel (colored
-  badges, doc ID / SQL++ detail per entry, filter, pause, clear) and
-  Start/Stop button disabled-state handling.
+`cbc-n1qlback` comes from libcouchbase's `libcouchbase3-tools` apt package,
+which Couchbase only publishes for **amd64** — there is no arm64 build. The
+image is pinned to `linux/amd64` (in both the `Dockerfile` and
+`docker-compose.yml`) and runs under emulation (Rosetta/QEMU) on Apple
+Silicon hosts.
 
-## Troubleshooting
+## Environment variables
 
-### Couchbase connection failed at startup
-- Ensure the `couchbase` container is up and the `travel-sample` bucket is
-  loaded (`couchbase-init` handles this on first run).
-- Check `CB_HOST` / `CB_USERNAME` / `CB_PASSWORD` match `docker-compose.yml`.
-
-### Throughput won't reach the configured target
-- Check `docker stats load-generator couchbase` — if Couchbase CPU is high
-  and load-generator CPU is low, the cluster itself is the bottleneck (real
-  capacity limit, not a bug). If load-generator CPU is unexpectedly high
-  (100%+) for a modest ops/sec, suspect a connection leak — check
-  `docker exec load-generator sh -c "ls /proc/1/task | wc -l"`; it should
-  stay under ~30 threads at steady state.
-- Confirm the Couchbase query engine is actually up:
-  `docker exec couchbase ps aux | grep -E "cbq-engine|indexer"`. Both must
-  be running for N1QL operations to work at all.
-- Check host disk space — Couchbase's indexer will crash with
-  `no space left on device` if the Docker VM's disk fills up, taking the
-  N1QL query engine down with it (KV operations keep working since they
-  don't depend on it).
-
-### One operation type's rate affects another's
-This was a real bug (see Recent Improvements above) and should no longer
-happen. If you see it again, it's a regression — each operation type should
-have a fully independent worker pool.
-
-## License
-
-Part of the Couchbase demo observability stack.
+- `CB_HOST` (default `couchbase`)
+- `CB_USERNAME` (default `Administrator`)
+- `CB_PASSWORD` (default `password123`)
+- `CB_BUCKET` (default `travel-sample`)
+- `QUERIES_FILE` (default `queries.json` next to `app-new.py`)

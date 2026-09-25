@@ -1,0 +1,14 @@
+[
+  {
+    "key": "count_all",
+    "statement": "SELECT COUNT(*) FROM `travel-sample`"
+  },
+  {
+    "key": "select_5000",
+    "statement": "SELECT * FROM `travel-sample` LIMIT 5000"
+  },
+  {
+    "key": "route_airline_join",
+    "statement": "SELECT h.name, r.sourceairport FROM `travel-sample` r JOIN `travel-sample` h ON r.airlineid = META(h).id WHERE r.type = 'route' LIMIT 5"
+  }
+]

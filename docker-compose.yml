@@ -14,7 +14,9 @@ services:
     volumes:
       - couchbase_data:/opt/couchbase/var
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8091/pools"]
+      # -u creds are harmless pre-init (no admin exists yet, so they're ignored)
+      # and required post-init, since an initialized cluster requires auth on /pools.
+      test: ["CMD", "curl", "-f", "-u", "Administrator:password123", "http://localhost:8091/pools"]
       interval: 5s
       timeout: 10s
       retries: 60
@@ -107,6 +109,7 @@ services:
     build:
       context: ./load-generator
       dockerfile: Dockerfile
+    platform: linux/amd64   # libcouchbase's apt tools (cbc-n1qlback) are amd64-only
     container_name: load-generator
     depends_on:
       couchbase-init:
@@ -119,7 +122,7 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - ./load-generator/queries.json:/app/queries.json:ro
     restart: unless-stopped
 
   # ---------------------------------------------------------------------

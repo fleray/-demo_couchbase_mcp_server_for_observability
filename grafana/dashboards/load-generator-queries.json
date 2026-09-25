@@ -1,0 +1,57 @@
+{
+  "id": null,
+  "uid": "load-generator-queries",
+  "title": "Load Generator - Query Duration",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-15m", "to": "now" },
+  "tags": ["couchbase", "demo", "load-generator"],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Average Query Duration",
+      "type": "timeseries",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        {
+          "expr": "rate(loadgen_query_duration_seconds_sum[1m]) / rate(loadgen_query_duration_seconds_count[1m])",
+          "legendFormat": "{{query}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "p95 Query Duration",
+      "type": "timeseries",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(loadgen_query_duration_seconds_bucket[1m])) by (le, query))",
+          "legendFormat": "{{query}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Query Samples / sec",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 18 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(loadgen_query_duration_seconds_count[1m])",
+          "legendFormat": "{{query}}",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}
